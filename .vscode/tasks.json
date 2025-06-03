@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build pdev",
+      "type": "shell",
+      "command": "g++",
+      "args": [
+        "interpreter/main.cpp",
+        "interpreter/lexer.cpp",
+        "interpreter/parser.cpp",
+        "interpreter/interpreter.cpp",
+        "-o",
+        "pdev.exe"
+        ],
+      "group": "build",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Run test.pdev",
+      "type": "shell",
+      "dependsOn": "Build pdev",
+      "command": "./pdev.exe",
+      "args": ["test.pdev"],
+      "group": "test",
+      "problemMatcher": [],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "shell": {
+          "executable": "cmd.exe",
+          "args": ["/c"]
+        }
+      }
+    }
+  ]
+}

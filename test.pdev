@@ -1,0 +1,8 @@
+function greet1(string1) {
+  write(string1);
+}
+function greet(string) {
+  greet1("Hello");
+  write(string);
+}
+greet("World");

@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run PDev Script",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/pdev.exe",
+      "args": ["test.pdev"],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "preLaunchTask": "Build pdev",
+      "console": "integratedTerminal"
+    }
+  ]
+}
