@@ -10,6 +10,8 @@
         "interpreter/lexer.cpp",
         "interpreter/parser.cpp",
         "interpreter/interpreter.cpp",
+        "interpreter/Debugger.cpp",
+        "interpreter/ErrorHandler.cpp",
         "-o",
         "pdev.exe"
         ],

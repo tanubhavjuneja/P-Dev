@@ -1,8 +1,53 @@
-function greet1(string1) {
-  write(string1);
+// Test: FOR loop with break and continue
+write("Testing for loop:");
+for (i -> 0; i < 5; i -> i + 1) {
+    if (i == 2) {
+        write("Skipping 2");
+        continue;
+    }
+    if (i == 4) {
+        write("Breaking at 4");
+        break;
+    }
+    write(i);
 }
-function greet(string) {
-  greet1("Hello");
-  write(string);
+
+// Test: DO-WHILE loop (should run at least once even if false)
+write("Testing do-while loop:");
+count -> 10;
+do {
+    write(count);
+    count -> count + 1;
+} while (count < 10);
+
+// Test: DO-WHILE followed by normal WHILE
+write("Testing do-while followed by while:");
+x -> 0;
+do {
+    write("Do once");
+    x -> x + 1;
 }
-greet("World");
+while (false); // This should be ignored
+
+while (x < 3) {
+    write(x);
+    x -> x + 1;
+}
+
+// Test: WHILE with break condition
+write("Testing while loop with break:");
+val -> 0;
+while (true) {
+    if (val == 3) {
+        write("Breaking loop");
+        break;
+    }
+    write(val);
+    val -> val + 1;
+}
+
+// Test: FOR loop with 0 iterations
+write("Testing for loop with 0 iterations:");
+for (j -> 5; j < 5; j -> j + 1) {
+    write("This should not appear");
+}

@@ -2,7 +2,6 @@
 #include "parser.h"
 #include <iostream>
 #include <sstream>
-
 void interpretLine(const std::string& line) {
     try {
         Parser parser(line);
@@ -11,7 +10,6 @@ void interpretLine(const std::string& line) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
-
 void execStatements(const std::vector<std::string>& lines) {
     std::string fullInput;
     for (const auto& line : lines) {
@@ -24,4 +22,3 @@ void execStatements(const std::vector<std::string>& lines) {
         std::cerr << "Error: " << e.what() << std::endl;
     }
 }
-

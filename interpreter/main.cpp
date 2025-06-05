@@ -13,7 +13,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "Failed to open file: " << argv[1] << "\n";
         return 1;
     }
-
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(file, line)) {
@@ -21,7 +20,6 @@ int main(int argc, char* argv[]) {
             lines.push_back(line);
         }
     }
-
     execStatements(lines);
     return 0;
 }

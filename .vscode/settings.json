@@ -62,6 +62,7 @@
         "xutility": "cpp",
         "variant": "cpp",
         "deque": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "optional": "cpp"
     }
 }

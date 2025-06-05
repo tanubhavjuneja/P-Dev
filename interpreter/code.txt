@@ -1,3 +1,216 @@
+#lexer.h
+#pragma once
+#include <string>
+#include <vector>
+struct Token {
+    enum Type {
+        NUM, VAR, OP, LPAREN, RPAREN,
+        LBRACE, RBRACE, SEMICOLON, ARROW,
+        FUNCTION, WRITE, END, STRING, 
+        IF, ELSE,EQUAL, NOT_EQUAL, LESS, 
+        GREATER, LESS_EQUAL, GREATER_EQUAL,
+        ASSIGN, COMMA, RETURN
+    } type;
+    std::string text;
+};
+class Lexer {
+public:
+    Lexer(const std::string& input);
+    Token nextToken();
+    char peek();
+    char get();
+    size_t getPosition() const;
+    void setPosition(size_t pos);
+    Token peekToken();
+    int getLineNumber(size_t position) const;
+    void setLineNumber(int newLine);
+private:
+    std::string input;
+    size_t pos;
+    bool hasBufferedToken = false;
+    Token bufferedToken;
+    int lineNumber = 1;
+};
+
+#lexer.cpp
+#include "lexer.h"
+#include <cctype>
+#include <stdexcept>
+Lexer::Lexer(const std::string& input) : input(input), pos(0) {}
+char Lexer::peek() {
+    return pos < input.size() ? input[pos] : '\0';
+}
+char Lexer::get() {
+    if (pos >= input.size()) return '\0';
+    char c = input[pos++];
+    if (c == '\n') {
+        lineNumber++;
+    }
+    return c;
+}
+int Lexer::getLineNumber(size_t position) const {
+    if (position > input.size())
+        position = input.size();
+    int line = 1;
+    for (size_t i = 0; i < position; ++i) {
+        if (input[i] == '\n')
+            ++line;
+    }
+    return line;
+}
+void Lexer::setLineNumber(int newLine) {
+    lineNumber = newLine;
+}
+size_t Lexer::getPosition() const {
+    return pos;
+}
+void Lexer::setPosition(size_t p) {
+    pos = p;
+    hasBufferedToken=false;
+}
+Token Lexer::peekToken() {
+    if (!hasBufferedToken) {
+        bufferedToken = nextToken();
+        hasBufferedToken = true;
+    }
+    return bufferedToken;
+}
+Token Lexer::nextToken() {
+    if (hasBufferedToken) {
+        hasBufferedToken = false;
+        return bufferedToken;
+    }
+    while (isspace(peek())) get();
+    if (pos >= input.size()) {
+        return {Token::END, ""};
+    }
+    char current = peek();
+    if (isdigit(current)) {
+        std::string num;
+        while (isdigit(peek())) num.push_back(get());
+        return {Token::NUM, num};
+    }
+    if (isalpha(current) || current == '_') {
+        std::string var;
+        while (isalnum(peek()) || peek() == '_') var.push_back(get());
+        if (var == "function") return {Token::FUNCTION, var};
+        if (var == "write") return {Token::WRITE, var};
+        if (var == "if") return {Token::IF, var};
+        if (var == "else") return {Token::ELSE, var};
+        return {Token::VAR, var};
+    }
+    switch (current) {
+        case '=':
+            get();
+            if (peek() == '=') {
+                get();
+                return {Token::EQUAL, "=="};
+            }
+            return {Token::ASSIGN, "="};
+
+        case '!':
+            get();
+            if (peek() == '=') {
+                get();
+                return {Token::NOT_EQUAL, "!="};
+            }
+            throw std::runtime_error("Unexpected token '!'");
+        
+        case '<':
+            get();
+            if (peek() == '=') {
+                get();
+                return {Token::LESS_EQUAL, "<="};
+            }
+            return {Token::LESS, "<"};
+
+        case '>':
+            get();
+            if (peek() == '=') {
+                get();
+                return {Token::GREATER_EQUAL, ">="};
+            }
+            return {Token::GREATER, ">"};
+
+        case '-':
+            get();
+            if (peek() == '>') {
+                get();
+                return {Token::ARROW, "->"};
+            }
+            return {Token::OP, "-"};
+        
+        case '"': {
+            get();  // consume opening quote
+            std::string str;
+            while (peek() != '"' && peek() != '\0') {
+                str.push_back(get());
+            }
+            if (peek() == '"') get(); 
+            else throw std::runtime_error("Unterminated string literal");
+            return {Token::STRING, str};
+        }
+        case '+': case '*': case '/': {
+            char op = get();
+            return {Token::OP, std::string(1, op)};
+        }
+        case '(': get(); return {Token::LPAREN, "("};
+        case ')': get(); return {Token::RPAREN, ")"};
+        case '{': get(); return {Token::LBRACE, "{"};
+        case '}': get(); return {Token::RBRACE, "}"};
+        case ',': get(); return {Token::COMMA, ","};
+        case ';': get(); return {Token::SEMICOLON, ";"};
+    }
+    throw std::runtime_error(std::string("Unknown character: ") + get());
+}
+
+#parser.h
+#pragma once
+#include "lexer.h"
+#include <map>
+#include <string>
+#include <vector>
+#include <variant>
+#include <stack>
+#include <unordered_map>
+using Value = std::variant<int, std::string>;
+class Parser {
+public:
+    Parser(Lexer lexer);
+    void parse();
+    int parseExpression();
+    void statement();
+    bool parseCondition();
+    void parseIfStatement();
+    void parseVarOrFunctionCall();
+    int parseFunctionCallArgsAndExecute(const std::string& funcName);
+    void parseWriteStatement();
+    void parseFunctionDefinition();
+    void printContextTokens(int contextSize = 5);
+    bool hasReturnValue = false;
+    int lastReturnValue = 0;
+    std::vector<std::unordered_map<std::string, Value>> variableStack;
+    std::vector<Value> parseFunctionArguments(const std::unordered_map<std::string, Value>& currentScope);
+private:
+    struct FunctionInfo {
+        size_t position;
+        std::vector<std::string> params;
+    };
+    void pushScope();
+    void popScope();
+    Value getVariableValue(const std::string& name);
+    void setVariableValue(const std::string& name, Value value);
+    std::map<std::string, FunctionInfo> functions;
+    std::stack<std::pair<size_t, Token>> returnStates;
+    Lexer lexer;
+    Token currentToken;
+    void consume(Token::Type expected);
+    int expr();
+    int term();
+    int factor();
+};
+
+#parser.cpp
 #include "parser.h"
 #include "Debugger.h"
 #include "ErrorHandler.h"
@@ -21,7 +234,7 @@ void Parser::popScope() {
         ErrorHandler::throwError("Variable scope stack underflow", lexer.getLineNumber(lexer.getPosition()));
     }
 }
-Value Parser::lookupVariableValue(const std::string& name) {
+Value Parser::getVariableValue(const std::string& name) {
     for (auto it = variableStack.rbegin(); it != variableStack.rend(); ++it) {
         auto found = it->find(name);
         if (found != it->end()) {
@@ -29,7 +242,7 @@ Value Parser::lookupVariableValue(const std::string& name) {
         }
     }
     ErrorHandler::throwError("Undefined variable: " + name, lexer.getLineNumber(lexer.getPosition()));
-    return Value(); 
+    return Value{}; // unreachable, just to satisfy compiler
 }
 void Parser::setVariableValue(const std::string& name, Value value) {
     if (variableStack.empty()) {
@@ -53,32 +266,6 @@ void Parser::statement() {
         case Token::END:
             Debugger::log("Reached END token in statement()");
             return;
-            case Token::FOR:
-            parseForStatement();
-            break;
-        case Token::DO:
-            parseDoStatement();
-            break;
-        case Token::BREAK:
-            Debugger::log("Processing break statement");
-            consume(Token::BREAK);
-            consume(Token::SEMICOLON);
-            loopBreak = true;
-            break;
-        case Token::CONTINUE:
-            Debugger::log("Processing continue statement");
-            consume(Token::CONTINUE);
-            consume(Token::SEMICOLON);
-            loopContinue = true;
-            break;
-        case Token::WHILE:
-            parseWhileStatement();
-            break;
-        case Token::PASS:
-            Debugger::log("Processing pass statement");
-            consume(Token::PASS);
-            consume(Token::SEMICOLON);
-            break;
         case Token::IF:
             parseIfStatement();
             break;
@@ -92,7 +279,11 @@ void Parser::statement() {
             parseFunctionDefinition();
             break;
         case Token::RETURN:
-            parseReturnStatement();
+            Debugger::log("Processing return statement");
+            consume(Token::RETURN);
+            lastReturnValue = expr();
+            hasReturnValue = true;
+            consume(Token::SEMICOLON);
             break;
         default:
             ErrorHandler::throwError("Unknown statement starting with token: " + currentToken.text, lexer.getLineNumber(lexer.getPosition()));
@@ -139,7 +330,6 @@ int Parser::factor() {
         return val;
     } else if (currentToken.type == Token::NUM) {
         int val = std::stoi(currentToken.text);
-        Debugger::log(currentToken.text);
         consume(Token::NUM);
         return val;
     } else if (currentToken.type == Token::VAR) {
@@ -150,7 +340,7 @@ int Parser::factor() {
             return parseFunctionCallArgsAndExecute(name);
         } else {
             consume(Token::VAR);
-            Value val = lookupVariableValue(name);
+            Value val = getVariableValue(name);
             if (std::holds_alternative<int>(val)) {
                 return std::get<int>(val);
             } else {
@@ -166,274 +356,121 @@ int Parser::factor() {
         return 0;
     }
 }
-void Parser::parseReturnStatement() {
-    consume(Token::RETURN);
-    if (currentToken.type != Token::SEMICOLON) {
-        returnValue = expr();
-    } else {
-        returnValue = Value();
+void Parser::printContextTokens(int contextSize) {
+    int lexerPos = lexer.getPosition();
+    lexer.setPosition(0);
+    std::vector<std::pair<Token, int>> tokensWithPos;
+    while (true) {
+        int pos = lexer.getPosition();
+        Token tok = lexer.nextToken();
+        tokensWithPos.emplace_back(tok, pos);
+        if (tok.type == Token::END) break;
     }
-    hasReturnValue = true;
-    consume(Token::SEMICOLON);
-}
-void Parser::executeBlock() {
-    pushScope();
-    int braceCount = 1;
-    consume(Token::LBRACE);
-    while (braceCount > 0 && currentToken.type != Token::END && !hasReturnValue) {
-        if (currentToken.type == Token::LBRACE) {
-            braceCount++;
-            consume(Token::LBRACE);
-        } else if (currentToken.type == Token::RBRACE) {
-            braceCount--;
-            consume(Token::RBRACE);
-        } else {
-            statement();
-        }
+    int tokenIndex = 0;
+    for (; tokenIndex < (int)tokensWithPos.size(); tokenIndex++) {
+        if (tokensWithPos[tokenIndex].second >= lexerPos) break;
     }
-    popScope();
-}
-void Parser::parseAssignmentExpression() {
-    std::string varName = currentToken.text;
-    std::cout<<currentToken.text;
-    consume(Token::VAR);
-    consume(Token::ARROW); 
-    Value val = expr();
-    setVariableValue(varName, val);
-}
-Parser::ForUpdateInfo Parser::parseForUpdateExpression() {
-    ForUpdateInfo info;
-    info.varName = currentToken.text;
-    consume(Token::VAR);
-    if (currentToken.text == "++") {
-        consume(Token::INCREMENT);
-        info.op = UpdateOp::INCREMENT;
-    } else if (currentToken.text == "--") {
-        consume(Token::DECREMENT);
-        info.op = UpdateOp::DECREMENT;
-    } else if (currentToken.type == Token::ARROW) {
-        consume(Token::ARROW);
-        int value = expr();
-        info.op = UpdateOp::ASSIGN;
-        info.assignedValue = value;
-        info.hasAssignedValue = true;
-    } else {
-        ErrorHandler::throwError("Invalid update expression in for loop", lexer.getLineNumber(lexer.getPosition()));
+    if (tokenIndex >= (int)tokensWithPos.size()) tokenIndex = (int)tokensWithPos.size() - 1;
+    int start = std::max(0, tokenIndex - contextSize);
+    int end = std::min((int)tokensWithPos.size() - 1, tokenIndex + contextSize);
+    Debugger::log("---- Token Context ----");
+    for (int i = start; i <= end; ++i) {
+        const auto& [tok, pos] = tokensWithPos[i];
+        std::string prefix = (i == tokenIndex) ? ">> " : "   ";
+        Debugger::log(prefix + "Token[" + std::to_string(i) + "] at pos " + std::to_string(pos) + ": \"" + tok.text + "\" (type=" + std::to_string(tok.type) + ")");
     }
-    return info;
-}
-void Parser::parseForStatement() {
-    Debugger::log("Parsing for loop");
-    consume(Token::FOR);
-    consume(Token::LPAREN);
-
-    Debugger::log("Entering new scope for for loop");
-    pushScope();
-
-    if (currentToken.type != Token::SEMICOLON) {
-        Debugger::log("Parsing initialization/assignment part of for loop");
-        parseAssignmentExpression();
-    }
-    size_t conditionPos = lexer.getPosition();
-    consume(Token::SEMICOLON);
-
-    Debugger::log("Saving position for condition expression");
-    
-    bool condition = true;
-
-    if (currentToken.type != Token::SEMICOLON) {
-        Debugger::log("Parsing condition of for loop");
-        condition = parseCondition();
-        Debugger::log("Initial condition evaluated to: " + std::string(condition ? "true" : "false"));
-    }
-    consume(Token::SEMICOLON);
-
-    size_t updatePos = lexer.getPosition();
-    bool hasUpdate = (currentToken.type != Token::RPAREN);
-    ForUpdateInfo updateInfo;
-
-    if (hasUpdate) {
-        Debugger::log("Parsing update expression of for loop");
-        updateInfo = parseForUpdateExpression();
-        Debugger::log("Parsed update: var = " + updateInfo.varName);
-    }
-
-    consume(Token::RPAREN);
-
-    size_t blockStart = lexer.getPosition();
-    Token savedToken = currentToken;
-
-    while (condition && !hasReturnValue) {
-        Debugger::log("For loop iteration start");
-        loopBreak = false;
-        loopContinue = false;
-
-        lexer.setPosition(blockStart);
-        currentToken = savedToken;
-
-        Debugger::log("Executing for loop block");
-        executeBlock();
-
-        if (loopBreak) {
-            Debugger::log("Loop break encountered");
-            break;
-        }
-        if (hasReturnValue) {
-            Debugger::log("Return encountered inside for loop");
-            break;
-        }
-
-        if (hasUpdate) {
-            Debugger::log("Applying update expression");
-            Value oldVal = lookupVariableValue(updateInfo.varName);
-
-            switch (updateInfo.op) {
-                case UpdateOp::INCREMENT:
-                    if (!std::holds_alternative<int>(oldVal))
-                        ErrorHandler::throwError("Cannot increment non-integer variable: " + updateInfo.varName);
-                    setVariableValue(updateInfo.varName, Value(std::get<int>(oldVal) + 1));
-                    lookupVariableValue(updateInfo.varName);
-                    Debugger::log("Incremented variable " + updateInfo.varName);
-                    break;
-
-                case UpdateOp::DECREMENT:
-                    if (!std::holds_alternative<int>(oldVal))
-                        ErrorHandler::throwError("Cannot decrement non-integer variable: " + updateInfo.varName);
-                    setVariableValue(updateInfo.varName, Value(std::get<int>(oldVal) - 1));
-                    Debugger::log("Decremented variable " + updateInfo.varName);
-                    break;
-
-                case UpdateOp::ASSIGN:
-                    if (updateInfo.hasAssignedValue) {
-                        setVariableValue(updateInfo.varName, updateInfo.assignedValue);
-                        Debugger::log("Assigned value to variable " + updateInfo.varName);
-                    } else {
-                        ErrorHandler::throwError("No value for assignment update in for loop");
-                    }
-                    break;
-
-                default:
-                    Debugger::log("No update operation");
-                    break;
-            }
-        }
-
-        Debugger::log("Re-evaluating for loop condition");
-        lexer.setPosition(conditionPos);
-        currentToken = lexer.peekToken();
-        Debugger::printContextTokens(lexer);
-        condition = parseCondition();
-        
-        Debugger::log("Condition result: " + std::string(condition ? "true" : "false"));
-    }
-
-    Debugger::log("Popping for loop scope");
-    popScope();
-
-    if (!condition || hasReturnValue) {
-        Debugger::log("Skipping remaining for loop block");
-        lexer.setPosition(blockStart);
-        currentToken = savedToken;
-        skipBlock();
-    }
-}
-void Parser::parseDoStatement() {
-    consume(Token::DO);
-    size_t loopStart = lexer.getPosition();
-    executeBlock();                
-}
-void Parser::parseWhileStatement() {
-    consume(Token::WHILE);
-    consume(Token::LPAREN);
-    size_t conditionPos = lexer.getPosition();
-    bool condition = parseCondition();
-    consume(Token::RPAREN);
-    size_t blockStart = lexer.getPosition();
-    Token savedToken = currentToken;
-    while (condition && !hasReturnValue) {
-        lexer.setPosition(blockStart);
-        currentToken = savedToken;
-        loopBreak = false;
-        loopContinue = false;
-        executeBlock();
-        if (loopBreak) break;
-        if (hasReturnValue) break;
-        lexer.setPosition(conditionPos);
-        currentToken = lexer.nextToken();
-        condition = parseCondition();
-        consume(Token::RPAREN); 
-    }
-    if (!condition || hasReturnValue) {
-        lexer.setPosition(blockStart);
-        currentToken = savedToken;
-        skipBlock();  
-    }
-}
-void Parser::skipBlock() {
-    int braceCount = 0;
-    if (currentToken.type == Token::LBRACE) {
-        braceCount = 1;
-        consume(Token::LBRACE);
-    } else {
-        statement();
-        return;
-    }
-    while (braceCount > 0 && currentToken.type != Token::END) {
-        if (currentToken.type == Token::LBRACE) {
-            braceCount++;
-            consume(Token::LBRACE);
-        } else if (currentToken.type == Token::RBRACE) {
-            braceCount--;
-            consume(Token::RBRACE);
-        } else {
-            consume(currentToken.type);  // Just consume tokens inside block
-        }
-    }
-}
-void Parser::skipRemainingElifElseBlocks() {
-    while (currentToken.type == Token::ELIF || currentToken.type == Token::ELSE) {
-        if (currentToken.type == Token::ELIF) {
-            consume(Token::ELIF);
-            consume(Token::LPAREN);
-            // Skip condition expression
-            parseCondition();
-            consume(Token::RPAREN);
-            skipBlock();
-        } else if (currentToken.type == Token::ELSE) {
-            consume(Token::ELSE);
-            skipBlock();
-        }
-    }
+    Debugger::log("------------------------");
+    lexer.setPosition(lexerPos);
 }
 void Parser::parseIfStatement() {
+    Debugger::log("Processing if statement");
     consume(Token::IF);
     consume(Token::LPAREN);
     bool condition = parseCondition();
     consume(Token::RPAREN);
-    if (condition) {
-        executeBlock();
-        skipRemainingElifElseBlocks();
-    } else {
-        skipBlock();
-        while (currentToken.type == Token::ELIF || currentToken.type == Token::ELSE) {
-            if (currentToken.type == Token::ELIF) {
-                consume(Token::ELIF);
-                consume(Token::LPAREN);
-                bool elifCondition = parseCondition();
-                consume(Token::RPAREN);
+    size_t trueBlockStart = lexer.getPosition();
+    returnStates.push({lexer.getPosition(), currentToken});
+    consume(Token::LBRACE);
+    int braceCount = 1;
+    Debugger::log("Scanning to find end of if block");
+    while (braceCount > 0) {
+        Token tok = lexer.nextToken();
+        Debugger::log("Skipping token in if-block: " + tok.text + " (type=" + std::to_string(tok.type) + ")");
+        if (tok.type == Token::LBRACE) braceCount++;
+        else if (tok.type == Token::RBRACE) braceCount--;
+    }
 
-                if (elifCondition) {
-                    executeBlock();
-                    skipRemainingElifElseBlocks();
-                    break;
-                } else {
-                    skipBlock();
-                }
-            } else if (currentToken.type == Token::ELSE) {
-                consume(Token::ELSE);
-                executeBlock();
-                break;
+    size_t falseBlockStart = lexer.getPosition();
+
+    // Restore to before if-block for possible execution
+    auto [restorePos, restoreToken] = returnStates.top();
+    returnStates.pop();
+    lexer.setPosition(restorePos);
+    currentToken = restoreToken;
+
+    if (condition) {
+        Debugger::log("Condition is true. Executing if block");
+        consume(Token::LBRACE);
+        braceCount = 1;
+        while (braceCount > 0 && currentToken.type != Token::END && !hasReturnValue) {
+            Debugger::log("Executing token in if block: " + currentToken.text + " (type=" + std::to_string(currentToken.type) + ")");
+            if (currentToken.type == Token::LBRACE) {
+                braceCount++;
+                consume(Token::LBRACE);
+            } else if (currentToken.type == Token::RBRACE) {
+                braceCount--;
+                consume(Token::RBRACE);
+            } else {
+                statement();
             }
+        }
+    } else {
+        Debugger::log("Condition is false. Skipping if block");
+        lexer.setPosition(falseBlockStart);
+        currentToken = lexer.nextToken(); // Sync token stream
+    }
+
+    // Handle optional else block
+    if (currentToken.type == Token::ELSE) {
+        Debugger::log("Found else block");
+        consume(Token::ELSE);
+        returnStates.push({lexer.getPosition(), currentToken});
+        consume(Token::LBRACE);
+        braceCount = 1;
+        Debugger::log("Scanning to find end of else block");
+        while (braceCount > 0) {
+            Token tok = lexer.nextToken();
+            Debugger::log("Skipping token in else block: " + tok.text + " (type=" + std::to_string(tok.type) + ")");
+            if (tok.type == Token::LBRACE) braceCount++;
+            else if (tok.type == Token::RBRACE) braceCount--;
+        }
+
+        size_t endElse = lexer.getPosition();
+        auto [elsePos, elseToken] = returnStates.top();
+        returnStates.pop();
+
+        if (!condition) {
+            Debugger::log("Condition was false. Executing else block");
+            lexer.setPosition(elsePos);
+            currentToken = elseToken;
+            consume(Token::LBRACE);
+            braceCount = 1;
+            while (braceCount > 0 && currentToken.type != Token::END && !hasReturnValue) {
+                Debugger::log("Executing token in else block: " + currentToken.text + " (type=" + std::to_string(currentToken.type) + ")");
+                if (currentToken.type == Token::LBRACE) {
+                    braceCount++;
+                    consume(Token::LBRACE);
+                } else if (currentToken.type == Token::RBRACE) {
+                    braceCount--;
+                    consume(Token::RBRACE);
+                } else {
+                    statement();
+                }
+            }
+        } else {
+            Debugger::log("Skipping else block since condition was true");
+            lexer.setPosition(endElse);
+            currentToken = lexer.nextToken(); // Sync after skipping else
         }
     }
 }
@@ -505,6 +542,7 @@ std::vector<Value> Parser::parseFunctionArguments(const std::unordered_map<std::
         }
     }
     consume(Token::RPAREN);
+    consume(Token::SEMICOLON);
     Debugger::log("Completed parsing arguments. Total args: " + std::to_string(args.size()));
     return args;
 }
@@ -519,6 +557,7 @@ int Parser::parseFunctionCallArgsAndExecute(const std::string& funcName) {
     Debugger::log("Executing function '" + funcName + "' at position " + std::to_string(func.position));
     Debugger::log("Pushing return state: pos=" + std::to_string(lexer.getPosition()));
     returnStates.push({lexer.getPosition(), currentToken});
+    printContextTokens();
     lexer.setPosition(func.position);
     currentToken = lexer.nextToken();
     consume(Token::LBRACE);
@@ -606,6 +645,12 @@ void Parser::parseFunctionDefinition() {
         else if (tok.type == Token::RBRACE) braceCount--;
     }
     currentToken = lexer.nextToken();
+}
+int Parser::parseExpression() {
+    int val = expr();
+    if (currentToken.type != Token::END)
+        ErrorHandler::throwError("Unexpected tokens after expression");
+    return val;
 }
 void Parser::parse() {
     while (currentToken.type != Token::END) {
